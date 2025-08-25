@@ -22,26 +22,29 @@ export default function HomeScreen({ navigation }) {
   };
 
   const startSession = async (club) => {
-    if (!auth.currentUser) return;
-    const sessionId = `${Date.now()}`;
-    await setDoc(doc(db, `users/${auth.currentUser.uid}/sessions/${sessionId}`), {
-      sessionId,
-      startedAt: serverTimestamp(),
-      clubId: club.id,
-      clubName: club.name,
-      moodBefore: mood || null,
-      hrBefore: null, // will be filled in during breathing
-      hrAfter: null,
-      rating: null,
-      moodAfter: null,
-    });
-    navigation.navigate('Practice', { sessionId, club });
-  };
+  if (!auth.currentUser) return;
+  const sessionId = `${Date.now()}`;
+  await setDoc(doc(db, `users/${auth.currentUser.uid}/sessions/${sessionId}`), {
+    sessionId,
+    startedAt: serverTimestamp(),
+    clubId: club.id,
+    clubName: club.name,
+    moodBefore: mood || null,
+    hrBefore: null,
+    hrAfter: null,
+    rating: null,
+    moodAfter: null,
+  });
+  // ✅ Pass uid along
+  navigation.navigate('PracticeScreen', { sessionId, club, uid: auth.currentUser.uid });
+};
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Text style={{ fontSize: 24, fontWeight: '800', marginBottom: 8 }}>👋 Welcome!</Text>
+        <Text style={{ fontSize: 24, fontWeight: '800', marginBottom: 8 }}>
+  👋 Welcome{user ? `, ${user.displayName || user.email}` : ''}!
+</Text>
 
         <Section title="What's your mood today?">
           <MoodSelector value={mood} onChange={saveMoodCheckIn} />
@@ -58,11 +61,6 @@ export default function HomeScreen({ navigation }) {
           />
         </Section>
 
-        {user && (
-          <TouchableOpacity style={{ backgroundColor: '#ef4444', padding: 12, borderRadius: 12, marginTop: 8, alignItems: 'center' }} onPress={() => signOut(auth)}>
-            <Text style={{ color: 'white', fontWeight: '700' }}>Logout</Text>
-          </TouchableOpacity>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
