@@ -1,14 +1,17 @@
 // screens/StatsScreen.js
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, Text, View } from 'react-native';
+// import { VictoryAxis, VictoryBar, VictoryChart, VictoryLine } from 'victory-native';
 import { auth, db } from '../../config/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { Section } from './ui';
-import { VictoryBar, VictoryChart, VictoryLine, VictoryTheme, VictoryAxis } from 'victory-native';
+import { calculateHeartRateStats, fetchHeartRateHistory } from '../../utils/heartRateUtils';
 import { CLUBS, findMoodByKey } from './constants';
+import { Section } from './ui';
 
 export default function StatsScreen() {
   const [sessions, setSessions] = useState([]);
+  const [heartRateHistory, setHeartRateHistory] = useState([]);
+  const [heartRateStats, setHeartRateStats] = useState(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -18,6 +21,21 @@ export default function StatsScreen() {
       setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return unsub;
+  }, []);
+
+  // Load heart rate history
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const loadHeartRateData = async () => {
+      try {
+        const history = await fetchHeartRateHistory(auth.currentUser.uid);
+        setHeartRateHistory(history);
+        setHeartRateStats(calculateHeartRateStats(history));
+      } catch (error) {
+        console.error('Error loading heart rate data:', error);
+      }
+    };
+    loadHeartRateData();
   }, []);
 
   // Mood last 7 days
@@ -71,11 +89,9 @@ export default function StatsScreen() {
           {moodSeries.every(p => p.y === 0) ? (
             <Text>No data yet. Complete a session to see your mood trend.</Text>
           ) : (
-            <VictoryChart theme={VictoryTheme.material} domain={{ y: [0, 6] }}>
-              <VictoryAxis tickFormat={(t) => t} />
-              <VictoryAxis dependentAxis tickFormat={(t) => ['', '😭','😞','😐','🙂','😄','🤩'][t]} />
-              <VictoryLine data={moodSeries} x="x" y="y" />
-            </VictoryChart>
+            <View style={{ height: 200, backgroundColor: '#f8fafc', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#6b7280' }}>Mood chart temporarily disabled</Text>
+            </View>
           )}
         </Section>
 
@@ -83,30 +99,100 @@ export default function StatsScreen() {
           {clubPerf.length === 0 ? (
             <Text>No club sessions yet.</Text>
           ) : (
-            <VictoryChart theme={VictoryTheme.material} domainPadding={20}>
-              <VictoryAxis style={{ tickLabels: { angle: -30, fontSize: 10 }}} />
-              <VictoryAxis dependentAxis tickFormat={(t) => t.toFixed(0)} />
-              <VictoryBar data={clubPerf} x="club" y="rating" />
-            </VictoryChart>
+            <View style={{ height: 200, backgroundColor: '#f8fafc', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#6b7280' }}>Club performance chart temporarily disabled</Text>
+            </View>
           )}
         </Section>
 
-        <Section title="Heart Rate: Before vs After (per session)">
-          {hrSeries.length === 0 ? (
-            <Text>HR data appears once you record during practice and after.</Text>
-          ) : (
+        <Section title="❤️ Heart Rate Statistics">
+          {heartRateStats && heartRateStats.totalSessions > 0 ? (
             <View>
-              <Text style={{ marginBottom: 8 }}>X-axis = session order</Text>
-              <VictoryChart theme={VictoryTheme.material}>
-                <VictoryAxis />
-                <VictoryAxis dependentAxis />
-                <VictoryLine data={hrSeries.map(p => ({ x: p.x, y: p.before }))} />
-                <VictoryLine data={hrSeries.map(p => ({ x: p.x, y: p.after }))} />
-              </VictoryChart>
+              <View style={statsContainer}>
+                <View style={statItem}>
+                  <Text style={statValue}>{heartRateStats.totalSessions}</Text>
+                  <Text style={statLabel}>Total Sessions</Text>
+                </View>
+                <View style={statItem}>
+                  <Text style={statValue}>{heartRateStats.averageHrBefore}</Text>
+                  <Text style={statLabel}>Avg Before (bpm)</Text>
+                </View>
+                <View style={statItem}>
+                  <Text style={statValue}>{heartRateStats.averageHrAfter}</Text>
+                  <Text style={statLabel}>Avg After (bpm)</Text>
+                </View>
+              </View>
+              
+              <View style={statsContainer}>
+                <View style={statItem}>
+                  <Text style={[statValue, { color: heartRateStats.averageDifference > 0 ? '#ef4444' : '#10b981' }]}>
+                    {heartRateStats.averageDifference > 0 ? '+' : ''}{heartRateStats.averageDifference}
+                  </Text>
+                  <Text style={statLabel}>Avg Difference (bpm)</Text>
+                </View>
+                <View style={statItem}>
+                  <Text style={statValue}>{heartRateStats.maxDifference}</Text>
+                  <Text style={statLabel}>Max Increase (bpm)</Text>
+                </View>
+                <View style={statItem}>
+                  <Text style={statValue}>{heartRateStats.minDifference}</Text>
+                  <Text style={statLabel}>Min Change (bpm)</Text>
+                </View>
+              </View>
+
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#374151' }}>
+                  Recent Sessions:
+                </Text>
+                {heartRateHistory.slice(-5).map((record, index) => (
+                  <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                      Session {heartRateHistory.length - 4 + index}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#374151' }}>
+                      {record.hrBefore} → {record.hrAfter} 
+                      <Text style={{ color: record.difference > 0 ? '#ef4444' : '#10b981' }}>
+                        {' '}({record.difference > 0 ? '+' : ''}{record.difference})
+                      </Text>
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
+          ) : (
+            <Text style={{ color: '#6b7280' }}>
+              No heart rate data available. Complete some practice sessions to see your statistics.
+            </Text>
           )}
         </Section>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const statsContainer = {
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  marginBottom: 12,
+  paddingVertical: 12,
+  backgroundColor: '#f8fafc',
+  borderRadius: 8,
+};
+
+const statItem = {
+  alignItems: 'center',
+  flex: 1,
+};
+
+const statValue = {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#1f2937',
+};
+
+const statLabel = {
+  fontSize: 12,
+  color: '#6b7280',
+  marginTop: 2,
+  textAlign: 'center',
+};

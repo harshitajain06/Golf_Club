@@ -36,7 +36,12 @@ export default function HomeScreen({ navigation }) {
     moodAfter: null,
   });
   // ✅ Pass uid along
-  navigation.navigate('PracticeScreen', { sessionId, club, uid: auth.currentUser.uid });
+  // inside startSession
+navigation.navigate("PracticeFlow", {
+  screen: "Practice",
+  params: { sessionId, club, uid: auth.currentUser.uid },
+});
+
 };
 
   return (

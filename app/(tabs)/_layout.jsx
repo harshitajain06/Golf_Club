@@ -94,7 +94,7 @@ function TabsContainer() {
         component={PracticeStack}
         options={{ title: "Practice" }}
       />
-      <Tabs.Screen name="Breathe" component={BreatheScreen} />
+      {/* <Tabs.Screen name="Breathe" component={BreatheScreen} /> */}
       <Tabs.Screen name="Stats" component={StatsScreen} />
     </Tabs.Navigator>
   );

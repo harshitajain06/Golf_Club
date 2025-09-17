@@ -1,13 +1,15 @@
 // components/ui.js
-import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MOODS } from './constants';
 
 export const Section = ({ title, children, style }) => (
   <View style={[styles.section, style]}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    <View style={{ marginTop: 8 }}>{children}</View>
+    <Text style={styles.sectionTitle}>{title || ''}</Text>
+    <View style={{ marginTop: 8 }}>
+      {children || null}
+    </View>
   </View>
 );
 
