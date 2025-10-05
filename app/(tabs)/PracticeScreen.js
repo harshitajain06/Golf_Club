@@ -1,7 +1,8 @@
 // screens/PracticeScreen.js
-import { doc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Modal, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import VideoPlayer from '../../components/VideoPlayer';
 import { db } from '../../config/firebase';
 import { saveHeartRateData } from '../../utils/heartRateUtils';
 import { Section } from './ui';
@@ -26,10 +27,21 @@ const BREATHING_EXERCISES = {
 };
 
 export default function PracticeScreen({ route, navigation }) {
+  console.log('PracticeScreen route.params:', route.params);
   const { sessionId, club, uid } = route.params || {};
+  console.log('Extracted params - sessionId:', sessionId, 'club:', club, 'uid:', uid);
   const [hrBefore, setHrBefore] = useState('');
   const [hrAfter, setHrAfter] = useState('');
   const [exerciseCompleted, setExerciseCompleted] = useState(false);
+  
+  // Tutorial videos state
+  const [tutorialVideos, setTutorialVideos] = useState([]);
+  const [loadingVideos, setLoadingVideos] = useState(true);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  
+  // Confirmation modal state
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   
   // Timer states
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -48,6 +60,33 @@ export default function PracticeScreen({ route, navigation }) {
   const currentCycleRef = useRef(1);
   
   const exerciseData = BREATHING_EXERCISES[club?.name] || BREATHING_EXERCISES['Driver'];
+
+  // Fetch tutorial videos from Firebase
+  const fetchTutorialVideos = async () => {
+    try {
+      setLoadingVideos(true);
+      const tutorialsRef = collection(db, 'tutorials');
+      const q = query(tutorialsRef, where('clubType', '==', club?.name || 'Driver'), orderBy('order', 'asc'));
+      const querySnapshot = await getDocs(q);
+      
+      const videos = [];
+      querySnapshot.forEach((doc) => {
+        videos.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setTutorialVideos(videos);
+    } catch (error) {
+      console.error('Error fetching tutorial videos:', error);
+      Alert.alert('Error', 'Failed to load tutorial videos. Please try again.');
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  // Load tutorial videos on component mount
+  useEffect(() => {
+    fetchTutorialVideos();
+  }, [club?.name]);
 
   // Timer logic
   useEffect(() => {
@@ -239,6 +278,30 @@ export default function PracticeScreen({ route, navigation }) {
     startTimer();
   };
 
+  // Video handling functions
+  const openVideo = (video) => {
+    setSelectedVideo(video);
+    setShowVideoModal(true);
+  };
+
+  const closeVideoModal = () => {
+    setShowVideoModal(false);
+    setSelectedVideo(null);
+  };
+
+  // Confirmation modal functions
+  const showCompleteSessionConfirmation = () => {
+    if (!hrBefore || !hrAfter) {
+      Alert.alert('Heart Rate Required', 'Please enter both heart rate values to continue.');
+      return;
+    }
+    setShowConfirmationModal(true);
+  };
+
+  const closeConfirmationModal = () => {
+    setShowConfirmationModal(false);
+  };
+
   // Update phase progress
   useEffect(() => {
     if (isTimerRunning && currentPhase !== 'ready' && currentPhase !== 'completed') {
@@ -283,12 +346,24 @@ export default function PracticeScreen({ route, navigation }) {
   };
 
   const saveSessionAndContinue = async () => {
-    if (!sessionId) return;
+    console.log('saveSessionAndContinue called');
+    console.log('sessionId:', sessionId);
+    console.log('uid:', uid);
+    console.log('hrBefore:', hrBefore);
+    console.log('hrAfter:', hrAfter);
     
-    if (!hrBefore || !hrAfter) {
-      Alert.alert('Heart Rate Required', 'Please enter both heart rate values to continue.');
+    // Generate sessionId if missing (fallback for when navigation params aren't passed correctly)
+    const currentSessionId = sessionId || `${Date.now()}`;
+    console.log('Using sessionId:', currentSessionId);
+    
+    if (!uid) {
+      console.log('No uid, returning');
+      Alert.alert('Error', 'User not authenticated. Please log in again.');
       return;
     }
+    
+    // Close confirmation modal
+    setShowConfirmationModal(false);
 
     const hrBeforeValue = parseInt(hrBefore);
     const hrAfterValue = parseInt(hrAfter);
@@ -299,19 +374,35 @@ export default function PracticeScreen({ route, navigation }) {
     }
 
     try {
+      console.log('Starting to save session data...');
+      
+      // Create or update the session document
+      const sessionRef = doc(db, `users/${uid}/sessions/${currentSessionId}`);
+      
+      // First, try to create/update the session document with all the data
+      await setDoc(sessionRef, {
+        sessionId: currentSessionId,
+        startedAt: serverTimestamp(),
+        completedAt: serverTimestamp(),
+        clubId: club?.id || null,
+        clubName: club?.name || 'Unknown Club',
+        moodBefore: null,
+        hrBefore: hrBeforeValue,
+        hrAfter: hrAfterValue,
+        rating: null,
+        moodAfter: null,
+      }, { merge: true }); // merge: true will update existing fields or create if doesn't exist
+      
+      console.log('Session document created/updated successfully');
+      
       // Save heart rate data using the utility function
-      await saveHeartRateData(uid, sessionId, {
+      await saveHeartRateData(uid, currentSessionId, {
         hrBefore: hrBeforeValue,
         hrAfter: hrAfterValue,
         inputMethod: 'manual',
       });
       
-      // Also update the session document
-      await updateDoc(doc(db, `users/${uid}/sessions/${sessionId}`), {
-        hrBefore: hrBeforeValue,
-        hrAfter: hrAfterValue,
-        completedAt: new Date(),
-      });
+      console.log('Heart rate data saved successfully');
 
       Alert.alert('Success', 'Session completed successfully!', [
         { text: 'OK', onPress: () => navigation.navigate('Stats') }
@@ -327,11 +418,91 @@ export default function PracticeScreen({ route, navigation }) {
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 8 }}>🎯 Your Practice with the {club?.name || 'Golf Club'}</Text>
 
-        <Section title="📘 Tutorial">
-          <Text>
+        <Section title="📘 Tutorial Videos">
+          <Text style={{ fontSize: 16, marginBottom: 16, color: '#374151' }}>
             {club?.desc || 'Practice with your golf club'}. Visualize, align, and breathe: inhale 4s, hold 4s, exhale 6s.
             Repeat 5 cycles, maintain relaxed grip pressure.
           </Text>
+          
+          {loadingVideos ? (
+            <View style={{ alignItems: 'center', padding: 20 }}>
+              <ActivityIndicator size="large" color="#2563eb" />
+              <Text style={{ marginTop: 8, color: '#6b7280' }}>Loading tutorial videos...</Text>
+            </View>
+          ) : tutorialVideos.length > 0 ? (
+            <View>
+              {tutorialVideos.map((video, index) => (
+                <TouchableOpacity
+                  key={video.id}
+                  style={{
+                    backgroundColor: 'white',
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: '#e5e7eb',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}
+                  onPress={() => openVideo(video)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{
+                      width: 60,
+                      height: 60,
+                      backgroundColor: '#f3f4f6',
+                      borderRadius: 8,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      marginRight: 12
+                    }}>
+                      <Text style={{ fontSize: 24 }}>🎥</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#1f2937', marginBottom: 4 }}>
+                        {video.title || `Tutorial ${index + 1}`}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 4 }}>
+                        {video.description || 'Learn proper technique and breathing'}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+                        Duration: {video.duration || 'N/A'} • {video.difficulty || 'Beginner'}
+                      </Text>
+                    </View>
+                    <View style={{
+                      width: 32,
+                      height: 32,
+                      backgroundColor: '#2563eb',
+                      borderRadius: 16,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      <Text style={{ color: 'white', fontSize: 16 }}>▶</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={{
+              backgroundColor: '#f9fafb',
+              borderRadius: 8,
+              padding: 16,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#e5e7eb'
+            }}>
+              <Text style={{ fontSize: 16, color: '#6b7280', textAlign: 'center' }}>
+                No tutorial videos available for {club?.name || 'this club'} yet.
+              </Text>
+              <Text style={{ fontSize: 14, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>
+                Check back later for new content!
+              </Text>
+            </View>
+          )}
         </Section>
 
         <Section title="🫁 Breathing Exercise Timer">
@@ -589,7 +760,7 @@ export default function PracticeScreen({ route, navigation }) {
         )}
 
         {exerciseCompleted && (
-          <TouchableOpacity style={[btn.primary, { backgroundColor: '#0d9488' }]} onPress={saveSessionAndContinue}>
+          <TouchableOpacity style={[btn.primary, { backgroundColor: '#0d9488' }]} onPress={showCompleteSessionConfirmation}>
             <Text style={btn.text}>Complete Session</Text>
           </TouchableOpacity>
         )}
@@ -742,6 +913,253 @@ export default function PracticeScreen({ route, navigation }) {
                   color: 'white'
                 }}>
                   Start Again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Video Modal */}
+      <Modal
+        visible={showVideoModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeVideoModal}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 20,
+            width: '100%',
+            maxWidth: 400,
+            maxHeight: '80%',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: '#e5e7eb'
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: '#1f2937',
+                flex: 1
+              }}>
+                {selectedVideo?.title || 'Tutorial Video'}
+              </Text>
+              <TouchableOpacity
+                onPress={closeVideoModal}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: '#f3f4f6',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ fontSize: 18, color: '#6b7280' }}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Video Player */}
+            {selectedVideo && (
+              <VideoPlayer
+                videoUrl={selectedVideo.videoUrl}
+                fallbackVideoUrl={selectedVideo.fallbackVideoUrl}
+                style={{ height: 250 }}
+                showControls={true}
+                autoPlay={false}
+              />
+            )}
+
+            {/* Video Info */}
+            {selectedVideo && (
+              <View style={{ padding: 16 }}>
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: '#1f2937',
+                  marginBottom: 8
+                }}>
+                  {selectedVideo.title || 'Tutorial Video'}
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: '#6b7280',
+                  marginBottom: 8
+                }}>
+                  {selectedVideo.description || 'Learn proper technique and breathing for this golf club.'}
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+                    Duration: {selectedVideo.duration || 'N/A'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+                    Difficulty: {selectedVideo.difficulty || 'Beginner'}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirmation Modal */}
+      <Modal
+        visible={showConfirmationModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeConfirmationModal}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 20,
+            padding: 24,
+            width: '100%',
+            maxWidth: 400,
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            elevation: 10
+          }}>
+            {/* Icon */}
+            <View style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: '#fef3c7',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 20
+            }}>
+              <Text style={{ fontSize: 40 }}>⚠️</Text>
+            </View>
+
+            {/* Title */}
+            <Text style={{
+              fontSize: 24,
+              fontWeight: 'bold',
+              color: '#1f2937',
+              textAlign: 'center',
+              marginBottom: 12
+            }}>
+              Complete Session?
+            </Text>
+
+            {/* Message */}
+            <Text style={{
+              fontSize: 16,
+              color: '#6b7280',
+              textAlign: 'center',
+              marginBottom: 24,
+              lineHeight: 24
+            }}>
+              Are you sure you want to complete this practice session? This will save your heart rate data and end the current session.
+            </Text>
+
+            {/* Session Summary */}
+            <View style={{
+              backgroundColor: '#f8fafc',
+              borderRadius: 12,
+              padding: 16,
+              width: '100%',
+              marginBottom: 24,
+              borderWidth: 1,
+              borderColor: '#e2e8f0'
+            }}>
+              <Text style={{
+                fontSize: 16,
+                fontWeight: '600',
+                color: '#374151',
+                textAlign: 'center',
+                marginBottom: 12
+              }}>
+                Session Summary
+              </Text>
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 14, color: '#6b7280' }}>Club:</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151' }}>
+                  {club?.name || 'Golf Club'}
+                </Text>
+              </View>
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 14, color: '#6b7280' }}>Heart Rate Before:</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151' }}>
+                  {hrBefore} bpm
+                </Text>
+              </View>
+              
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 14, color: '#6b7280' }}>Heart Rate After:</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151' }}>
+                  {hrAfter} bpm
+                </Text>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#f3f4f6',
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  alignItems: 'center'
+                }}
+                onPress={closeConfirmationModal}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: '#374151'
+                }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#0d9488',
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  alignItems: 'center'
+                }}
+                onPress={saveSessionAndContinue}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: 'white'
+                }}>
+                  Complete Session
                 </Text>
               </TouchableOpacity>
             </View>
