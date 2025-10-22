@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { useNavigation } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Modal, Platform,
@@ -82,6 +83,7 @@ export default function AuthPage() {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const isWeb = Platform.OS === 'web';
+  const navigation = useNavigation();
 
   const [user, loading, error] = useAuthState(auth);
 
@@ -104,7 +106,7 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/(tabs)/HomeScreen');
+      navigation.replace('MainDrawer');
     }
   }, [user]);
 
