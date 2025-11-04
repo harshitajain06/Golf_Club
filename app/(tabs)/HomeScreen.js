@@ -1,11 +1,11 @@
 // screens/HomeScreen.js
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, Text, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { Alert, FlatList, SafeAreaView, ScrollView, Text } from 'react-native';
 import { auth, db } from '../../config/firebase';
-import { Section, MoodSelector, ClubCard } from './ui';
 import { CLUBS } from './constants';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ClubCard, MoodSelector, Section } from './ui';
 
 export default function HomeScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -14,10 +14,17 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   const saveMoodCheckIn = async (m) => {
+    console.log('Saving mood check-in:', m);
     setMood(m);
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      console.log('No authenticated user');
+      return;
+    }
     const ref = doc(db, `users/${auth.currentUser.uid}/moodChecks/${Date.now()}`);
-    await setDoc(ref, { moodKey: m, ts: serverTimestamp() });
+    const data = { moodKey: m, ts: serverTimestamp() };
+    console.log('Saving to Firebase:', data);
+    await setDoc(ref, data);
+    console.log('Mood check-in saved successfully');
     Alert.alert('Saved', 'Mood check-in recorded!');
   };
 

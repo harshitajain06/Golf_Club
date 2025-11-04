@@ -88,6 +88,11 @@ export default function PracticeScreen({ route, navigation }) {
     fetchTutorialVideos();
   }, [club?.name]);
 
+  // Reload function for the reloader icon
+  const handleReload = () => {
+    fetchTutorialVideos();
+  };
+
   // Timer logic
   useEffect(() => {
     if (isTimerRunning) {
@@ -416,7 +421,25 @@ export default function PracticeScreen({ route, navigation }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 8 }}>🎯 Your Practice with the {club?.name || 'Golf Club'}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', flex: 1 }}>🎯 Your Practice with the {club?.name || 'Golf Club'}</Text>
+          <TouchableOpacity 
+            onPress={handleReload}
+            style={{
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: '#f3f4f6',
+              borderWidth: 1,
+              borderColor: '#d1d5db',
+              marginLeft: 12
+            }}
+            disabled={loadingVideos}
+          >
+            <Text style={{ fontSize: 18, color: loadingVideos ? '#9ca3af' : '#374151' }}>
+              {loadingVideos ? '⏳' : '🔄'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <Section title="📘 Tutorial Videos">
           <Text style={{ fontSize: 16, marginBottom: 16, color: '#374151' }}>
