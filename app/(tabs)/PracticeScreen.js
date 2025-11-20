@@ -65,19 +65,47 @@ export default function PracticeScreen({ route, navigation }) {
   const fetchTutorialVideos = async () => {
     try {
       setLoadingVideos(true);
+      const clubName = club?.name || 'Driver';
+      console.log('Fetching tutorials for club:', clubName);
+      
       const tutorialsRef = collection(db, 'tutorials');
-      const q = query(tutorialsRef, where('clubType', '==', club?.name || 'Driver'), orderBy('order', 'asc'));
-      const querySnapshot = await getDocs(q);
       
-      const videos = [];
-      querySnapshot.forEach((doc) => {
-        videos.push({ id: doc.id, ...doc.data() });
-      });
-      
-      setTutorialVideos(videos);
+      // Try query with orderBy first
+      try {
+        const q = query(tutorialsRef, where('clubType', '==', clubName), orderBy('order', 'asc'));
+        const querySnapshot = await getDocs(q);
+        
+        const videos = [];
+        querySnapshot.forEach((doc) => {
+          console.log('Found tutorial:', doc.id, doc.data());
+          videos.push({ id: doc.id, ...doc.data() });
+        });
+        
+        console.log(`Found ${videos.length} tutorials for ${clubName}`);
+        setTutorialVideos(videos);
+      } catch (orderError) {
+        // If orderBy fails (missing index or field), try without orderBy
+        console.log('Query with orderBy failed, trying without order:', orderError.message);
+        const simpleQuery = query(tutorialsRef, where('clubType', '==', clubName));
+        const querySnapshot = await getDocs(simpleQuery);
+        
+        const videos = [];
+        querySnapshot.forEach((doc) => {
+          console.log('Found tutorial (no order):', doc.id, doc.data());
+          videos.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Sort manually by order field if it exists
+        videos.sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        console.log(`Found ${videos.length} tutorials for ${clubName} (without orderBy)`);
+        setTutorialVideos(videos);
+      }
     } catch (error) {
       console.error('Error fetching tutorial videos:', error);
-      Alert.alert('Error', 'Failed to load tutorial videos. Please try again.');
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      Alert.alert('Error', `Failed to load tutorial videos: ${error.message}\n\nPlease check:\n1. Firebase tutorials collection exists\n2. Documents have 'clubType' field matching "${club?.name || 'Driver'}"\n3. Firestore rules allow read access`);
     } finally {
       setLoadingVideos(false);
     }

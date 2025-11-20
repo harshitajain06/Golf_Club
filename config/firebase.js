@@ -7,12 +7,13 @@ import { Platform } from 'react-native';
 
 // Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyBV2Q-_nJIcRHGUbhtwu8eKN9UAeaPvwQw",
-    authDomain: "fir-authentication-8abb6.firebaseapp.com",
-    projectId: "fir-authentication-8abb6",
-    storageBucket: "fir-authentication-8abb6.appspot.com",
-    messagingSenderId: "854259513422",
-    appId: "1:854259513422:web:9a3d38f04501b643f0ab1f"
+  apiKey: "AIzaSyBap_zf0Nhghp3K-LCCqSAU6kYA8lnEvBc",
+  authDomain: "golf-club-522dd.firebaseapp.com",
+  projectId: "golf-club-522dd",
+  storageBucket: "golf-club-522dd.firebasestorage.app",
+  messagingSenderId: "600567638058",
+  appId: "1:600567638058:web:f35064a411ba9625713b53",
+  measurementId: "G-WN87MY8N6X"
 };
 
 // Initialize Firebase
