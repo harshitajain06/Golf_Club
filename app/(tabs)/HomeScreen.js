@@ -69,6 +69,7 @@ navigation.navigate("PracticeFlow", {
             numColumns={2}
             columnWrapperStyle={{ gap: 12 }}
             contentContainerStyle={{ gap: 12 }}
+            scrollEnabled={false}
             renderItem={({ item }) => <ClubCard item={item} onPress={startSession} />}
           />
         </Section>
