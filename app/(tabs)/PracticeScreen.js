@@ -28,8 +28,8 @@ const BREATHING_EXERCISES = {
 
 export default function PracticeScreen({ route, navigation }) {
   console.log('PracticeScreen route.params:', route.params);
-  const { sessionId, club, uid } = route.params || {};
-  console.log('Extracted params - sessionId:', sessionId, 'club:', club, 'uid:', uid);
+  const { sessionId, club, uid, moodBefore } = route.params || {};
+  console.log('Extracted params - sessionId:', sessionId, 'club:', club, 'uid:', uid, 'moodBefore:', moodBefore);
   const [hrBefore, setHrBefore] = useState('');
   const [hrAfter, setHrAfter] = useState('');
   const [exerciseCompleted, setExerciseCompleted] = useState(false);
@@ -416,14 +416,11 @@ export default function PracticeScreen({ route, navigation }) {
       await setDoc(sessionRef, {
         sessionId: currentSessionId,
         startedAt: serverTimestamp(),
-        completedAt: serverTimestamp(),
         clubId: club?.id || null,
         clubName: club?.name || 'Unknown Club',
-        moodBefore: null,
+        moodBefore: moodBefore || null,
         hrBefore: hrBeforeValue,
         hrAfter: hrAfterValue,
-        rating: null,
-        moodAfter: null,
       }, { merge: true }); // merge: true will update existing fields or create if doesn't exist
       
       console.log('Session document created/updated successfully');
@@ -437,9 +434,15 @@ export default function PracticeScreen({ route, navigation }) {
       
       console.log('Heart rate data saved successfully');
 
-      Alert.alert('Success', 'Session completed successfully!', [
-        { text: 'OK', onPress: () => navigation.navigate('Stats') }
-      ]);
+      // Navigate to RecordPerformanceScreen to complete performance tracking
+      navigation.navigate('RecordPerformance', {
+        sessionId: currentSessionId,
+        club,
+        uid,
+        hrBefore: hrBeforeValue,
+        hrAfter: hrAfterValue,
+        moodBefore: moodBefore || null,
+      });
     } catch (error) {
       console.error('Error saving heart rate data:', error);
       Alert.alert('Error', 'Failed to save session data. Please try again.');

@@ -46,7 +46,7 @@ export default function HomeScreen({ navigation }) {
   // inside startSession
 navigation.navigate("PracticeFlow", {
   screen: "Practice",
-  params: { sessionId, club, uid: auth.currentUser.uid },
+  params: { sessionId, club, uid: auth.currentUser.uid, moodBefore: mood },
 });
 
 };

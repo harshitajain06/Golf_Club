@@ -41,6 +41,36 @@ export const RatingStars = ({ value, onChange }) => (
   </View>
 );
 
+// 10-point scale selector for confidence, focus, etc.
+export const ScaleSelector = ({ value, onChange, min = 1, max = 10, label }) => (
+  <View style={{ marginVertical: 8 }}>
+    {label && <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>{label}</Text>}
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+      {Array.from({ length: max - min + 1 }, (_, i) => min + i).map(n => (
+        <TouchableOpacity
+          key={n}
+          onPress={() => onChange(n)}
+          style={[
+            styles.scaleBtn,
+            value === n && styles.scaleBtnActive,
+            n === min && { marginLeft: 0 },
+            n === max && { marginRight: 0 },
+          ]}
+        >
+          <Text style={[styles.scaleBtnText, value === n && styles.scaleBtnTextActive]}>
+            {n}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+    {value && (
+      <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 8, textAlign: 'center' }}>
+        Selected: {value}/{max}
+      </Text>
+    )}
+  </View>
+);
+
 export const BreathingBubble = ({ running }) => {
   const scale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -87,4 +117,27 @@ const styles = StyleSheet.create({
   clubName: { fontSize: 16, fontWeight: '700' },
   clubDesc: { fontSize: 13, color: '#475569' },
   breatheCircle: { width: 140, height: 140, borderRadius: 999, backgroundColor: '#bfdbfe' },
+  scaleBtn: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    margin: 2,
+    minWidth: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  scaleBtnActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  scaleBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  scaleBtnTextActive: {
+    color: '#ffffff',
+  },
 });

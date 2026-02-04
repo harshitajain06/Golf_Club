@@ -1,10 +1,11 @@
 // screens/StatsScreen.js
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 // import { VictoryAxis, VictoryBar, VictoryChart, VictoryLine } from 'victory-native';
 import { auth, db } from '../../config/firebase';
 import { calculateHeartRateStats, fetchHeartRateHistory } from '../../utils/heartRateUtils';
+import { calculatePerformanceTrends, getClubInsights } from '../../utils/performanceUtils';
 import { findMoodByKey, MOODS } from './constants';
 import { Section } from './ui';
 
@@ -13,6 +14,7 @@ export default function StatsScreen() {
   const [heartRateHistory, setHeartRateHistory] = useState([]);
   const [heartRateStats, setHeartRateStats] = useState(null);
   const [moodChecks, setMoodChecks] = useState([]);
+  const [timelinePeriod, setTimelinePeriod] = useState('month'); // 'week' or 'month'
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -96,6 +98,39 @@ export default function StatsScreen() {
     return items;
   }, [sessions]);
 
+  // Filter sessions for timeline period
+  const timelineSessions = useMemo(() => {
+    const now = new Date();
+    const startDate = new Date();
+    
+    if (timelinePeriod === 'week') {
+      startDate.setDate(now.getDate() - 7);
+    } else {
+      startDate.setMonth(now.getMonth() - 1);
+    }
+
+    return sessions
+      .filter(s => {
+        const sessionDate = s.startedAt?.toDate?.() || new Date(s.startedAt?.seconds * 1000);
+        return sessionDate >= startDate;
+      })
+      .sort((a, b) => {
+        const dateA = a.startedAt?.toDate?.() || new Date(a.startedAt?.seconds * 1000);
+        const dateB = b.startedAt?.toDate?.() || new Date(b.startedAt?.seconds * 1000);
+        return dateA - dateB;
+      });
+  }, [sessions, timelinePeriod]);
+
+  // Calculate performance trends
+  const performanceTrends = useMemo(() => {
+    return calculatePerformanceTrends(timelineSessions);
+  }, [timelineSessions]);
+
+  // Get club insights
+  const clubInsights = useMemo(() => {
+    return getClubInsights(timelineSessions);
+  }, [timelineSessions]);
+
   // Simple Mood Chart Component
   const MoodChart = ({ data }) => {
     const maxScore = 6;
@@ -158,10 +193,201 @@ export default function StatsScreen() {
     );
   };
 
+  const getTrendIcon = (trend) => {
+    if (trend === 'improving') return '📈';
+    if (trend === 'declining') return '📉';
+    return '➡️';
+  };
+
+  const getTrendColor = (trend) => {
+    if (trend === 'improving') return '#10b981';
+    if (trend === 'declining') return '#ef4444';
+    return '#6b7280';
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 8 }}>📊 Your Stats</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 8 }}>📊 Performance Tracker</Text>
+
+        {/* Performance Timeline */}
+        <Section title="4️⃣ Performance Timeline">
+          <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+            <TouchableOpacity
+              onPress={() => setTimelinePeriod('week')}
+              style={[
+                periodBtn,
+                timelinePeriod === 'week' && periodBtnActive
+              ]}
+            >
+              <Text style={[periodBtnText, timelinePeriod === 'week' && periodBtnTextActive]}>
+                Week
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setTimelinePeriod('month')}
+              style={[
+                periodBtn,
+                timelinePeriod === 'month' && periodBtnActive,
+                { marginLeft: 8 }
+              ]}
+            >
+              <Text style={[periodBtnText, timelinePeriod === 'month' && periodBtnTextActive]}>
+                Month
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {timelineSessions.length === 0 ? (
+            <Text style={{ color: '#6b7280' }}>
+              No performance data for this {timelinePeriod}. Complete some sessions to see your trends.
+            </Text>
+          ) : (
+            <View>
+              {/* Confidence Trend */}
+              {performanceTrends.confidence.trend !== 'no_data' && (
+                <View style={trendItem}>
+                  <Text style={trendLabel}>
+                    {getTrendIcon(performanceTrends.confidence.trend)} Confidence
+                  </Text>
+                  <Text style={[trendValue, { color: getTrendColor(performanceTrends.confidence.trend) }]}>
+                    {performanceTrends.confidence.change >= 0 ? '+' : ''}{performanceTrends.confidence.change}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Focus Trend */}
+              {performanceTrends.focus.trend !== 'no_data' && (
+                <View style={trendItem}>
+                  <Text style={trendLabel}>
+                    {getTrendIcon(performanceTrends.focus.trend)} Focus
+                  </Text>
+                  <Text style={[trendValue, { color: getTrendColor(performanceTrends.focus.trend) }]}>
+                    {performanceTrends.focus.change >= 0 ? '+' : ''}{performanceTrends.focus.change}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Calmness Trend */}
+              {performanceTrends.calmness.trend !== 'no_data' && (
+                <View style={trendItem}>
+                  <Text style={trendLabel}>
+                    {getTrendIcon(performanceTrends.calmness.trend)} Calmness
+                  </Text>
+                  <Text style={[trendValue, { color: getTrendColor(performanceTrends.calmness.trend) }]}>
+                    {performanceTrends.calmness.change >= 0 ? '+' : ''}{performanceTrends.calmness.change}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Emotional Stability Trend */}
+              {performanceTrends.emotionalStability.trend !== 'no_data' && (
+                <View style={trendItem}>
+                  <Text style={trendLabel}>
+                    {getTrendIcon(performanceTrends.emotionalStability.trend)} Emotional Stability
+                  </Text>
+                  <Text style={[trendValue, { color: getTrendColor(performanceTrends.emotionalStability.trend) }]}>
+                    {performanceTrends.emotionalStability.change >= 0 ? '+' : ''}{performanceTrends.emotionalStability.change}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Session Consistency Trend */}
+              {performanceTrends.sessionConsistency.trend !== 'no_data' && (
+                <View style={trendItem}>
+                  <Text style={trendLabel}>
+                    {getTrendIcon(performanceTrends.sessionConsistency.trend)} Session Consistency
+                  </Text>
+                  <Text style={[trendValue, { color: getTrendColor(performanceTrends.sessionConsistency.trend) }]}>
+                    {performanceTrends.sessionConsistency.change >= 0 ? '+' : ''}{performanceTrends.sessionConsistency.change}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Summary Insights */}
+              {timelineSessions.length > 0 && (
+                <View style={{ marginTop: 16, padding: 12, backgroundColor: '#f0f9ff', borderRadius: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#1e40af' }}>
+                    Key Insights ({timelinePeriod === 'week' ? 'This Week' : 'This Month'}):
+                  </Text>
+                  {performanceTrends.confidence.trend !== 'no_data' && (
+                    <Text style={{ fontSize: 13, color: '#1e40af', marginBottom: 4 }}>
+                      • Confidence {performanceTrends.confidence.trend === 'improving' ? 'improved' : performanceTrends.confidence.trend === 'declining' ? 'declined' : 'remained stable'} by {Math.abs(performanceTrends.confidence.change)}%
+                    </Text>
+                  )}
+                  {performanceTrends.focus.trend !== 'no_data' && (
+                    <Text style={{ fontSize: 13, color: '#1e40af', marginBottom: 4 }}>
+                      • Focus {performanceTrends.focus.trend === 'improving' ? 'improved' : performanceTrends.focus.trend === 'declining' ? 'declined' : 'remained stable'}
+                    </Text>
+                  )}
+                  {performanceTrends.calmness.trend !== 'no_data' && (
+                    <Text style={{ fontSize: 13, color: '#1e40af', marginBottom: 4 }}>
+                      • Calmness {performanceTrends.calmness.trend === 'improving' ? 'improved' : performanceTrends.calmness.trend === 'declining' ? 'declined' : 'remained stable'}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+        </Section>
+
+        {/* Club-by-Club Insights */}
+        {clubInsights.length > 0 && (
+          <Section title="🏌️ Club Performance Insights">
+            {clubInsights.map((insight, index) => (
+              <View key={index} style={{ marginBottom: 16, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: '#1f2937' }}>
+                  {insight.clubName}
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ fontSize: 13, color: '#6b7280' }}>Sessions:</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{insight.sessionCount}</Text>
+                </View>
+                {insight.avgConsistency !== null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 13, color: '#6b7280' }}>Avg Consistency:</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{insight.avgConsistency}/10</Text>
+                  </View>
+                )}
+                {insight.avgComposure !== null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 13, color: '#6b7280' }}>Avg Composure:</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{insight.avgComposure}/10</Text>
+                  </View>
+                )}
+                {insight.fluctuation !== null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 13, color: '#6b7280' }}>Fluctuation:</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: insight.fluctuation > 2 ? '#ef4444' : '#10b981' }}>
+                      {insight.fluctuation > 2 ? 'High' : 'Low'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ))}
+            
+            {/* Summary of best/worst clubs */}
+            {clubInsights.length >= 2 && (
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: '#f0fdf4', borderRadius: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#166534' }}>
+                  Club Summary:
+                </Text>
+                {clubInsights.filter(c => c.avgComposure !== null).length > 0 && (
+                  <>
+                    <Text style={{ fontSize: 13, color: '#166534', marginBottom: 4 }}>
+                      • Strongest composure: {clubInsights.filter(c => c.avgComposure !== null).slice(0, 2).map(c => c.clubName).join(', ')}
+                    </Text>
+                    {clubInsights.filter(c => c.fluctuation !== null && c.fluctuation > 2).length > 0 && (
+                      <Text style={{ fontSize: 13, color: '#166534' }}>
+                        • Most fluctuation: {clubInsights.filter(c => c.fluctuation !== null && c.fluctuation > 2).map(c => c.clubName).join(', ')}
+                      </Text>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+          </Section>
+        )}
 
         <Section title="Mood (last 7 days)">
           {moodSeries.every(p => !p.hasData) ? (
@@ -262,4 +488,50 @@ const statLabel = {
   color: '#6b7280',
   marginTop: 2,
   textAlign: 'center',
+};
+
+const periodBtn = {
+  flex: 1,
+  paddingVertical: 8,
+  paddingHorizontal: 16,
+  borderRadius: 8,
+  backgroundColor: '#f3f4f6',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#e5e7eb',
+};
+
+const periodBtnActive = {
+  backgroundColor: '#3b82f6',
+  borderColor: '#2563eb',
+};
+
+const periodBtnText = {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#6b7280',
+};
+
+const periodBtnTextActive = {
+  color: '#ffffff',
+};
+
+const trendItem = {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingVertical: 8,
+  borderBottomWidth: 1,
+  borderBottomColor: '#e5e7eb',
+};
+
+const trendLabel = {
+  fontSize: 14,
+  color: '#374151',
+  flex: 1,
+};
+
+const trendValue = {
+  fontSize: 14,
+  fontWeight: '700',
 };
